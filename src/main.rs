@@ -80,6 +80,7 @@ struct Tweet {
     user: User,
     text: String,
     entities: Entities,
+    extended_entities: Option<ExtendedEntities>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -119,6 +120,66 @@ struct Media {
     indices: (usize, usize),
 }
 
+#[derive(Deserialize, Debug)]
+struct ExtendedEntities {
+    media: Vec<Media>,
+}
+
+trait Embeddable {
+    fn begin(&self) -> usize;
+    fn end(&self) -> usize;
+    fn text(&self) -> String;
+}
+
+impl Embeddable for Url {
+    fn begin(&self) -> usize {
+        self.indices.0
+    }
+    fn end(&self) -> usize {
+        self.indices.1
+    }
+    fn text(&self) -> String {
+        format!(r#"<a href="{0}">{0}</a>"#, self.expanded_url)
+    }
+}
+
+impl Embeddable for Hashtag {
+    fn begin(&self) -> usize {
+        self.indices.0
+    }
+    fn end(&self) -> usize {
+        self.indices.1
+    }
+    fn text(&self) -> String {
+        format!(r#"<a href="https://twitter.com/search?q=#{0}&src=hash>#{0}</a>"#, self.text)
+    }
+}
+
+impl Embeddable for UserMention {
+    fn begin(&self) -> usize {
+        self.indices.0
+    }
+    fn end(&self) -> usize {
+        self.indices.1
+    }
+    fn text(&self) -> String {
+        format!(r#"<a href="https://twitter.com/{0}">@{0}</a>"#, self.screen_name)
+    }
+}
+
+impl Embeddable for Media {
+    fn begin(&self) -> usize {
+        self.indices.0
+    }
+    fn end(&self) -> usize {
+        self.indices.1
+    }
+    fn text(&self) -> String {
+        format!(r#"<a href="{0}"><img alt="{0}" src="{0}"/></a>"#,
+                self.media_url_https)
+    }
+}
+
 #[derive(Debug)]
 struct Replacement {
     begin: usize,
@@ -126,60 +187,69 @@ struct Replacement {
     text: String,
 }
 
+fn embed<T>(replacements: &mut Vec<Replacement>, entity: &T)
+    where T: Embeddable
+{
+    let b = entity.begin();
+    let e = entity.end();
+    if replacements[b].text.is_empty() {
+        // initial
+        replacements[b].text = entity.text();
+        replacements[b].end = e;
+    } else {
+        // append
+        replacements[b].text.push_str(&entity.text());
+        if replacements[b].end != e {
+            panic!("New entity has ({}, {}) indices, but current entity has ({}, {})",
+                   b,
+                   e,
+                   replacements[b].begin,
+                   replacements[b].end);
+        }
+    }
+}
+
 impl Tweet {
     fn to_html(&self) -> String {
-        let mut replacements = Vec::new();
-        for url in &self.entities.urls {
+        let mut replacements = Vec::with_capacity(self.text.len());
+        for i in 0..self.text.len() {
             replacements.push(Replacement {
-                                  begin: url.indices.0,
-                                  end: url.indices.1,
-                                  text: format!(r#"<a href="{0}">{0}</a>"#, url.expanded_url),
-                              })
+                                  begin: i,
+                                  end: i,
+                                  text: "".to_owned(),
+                              });
+        }
+
+        for url in &self.entities.urls {
+            embed(&mut replacements, url);
         }
         for hashtag in &self.entities.hashtags {
-            replacements.push(Replacement {
-                                  begin: hashtag.indices.0,
-                                  end: hashtag.indices.1,
-                                  text: format!(r#"<a href="https://twitter.com/search?q=#{0}&src=hash>#{0}</a>"#, hashtag.text),
-                              })
+            embed(&mut replacements, hashtag);
         }
         for user_mention in &self.entities.user_mentions {
-            replacements.push(Replacement {
-                                  begin: user_mention.indices.0,
-                                  end: user_mention.indices.1,
-                                  text: format!(r#"<a href="https://twitter.com/{0}">@{0}</a>"#, user_mention.screen_name),
-                              })
+            embed(&mut replacements, user_mention);
         }
-        if let Some(ref medias) = self.entities.media {
+
+        if let Some(ref extended_entities) = self.extended_entities {
+            for media in &extended_entities.media {
+                embed(&mut replacements, media);
+            }
+        } else if let Some(ref medias) = self.entities.media {
             for media in medias {
-                replacements.push(Replacement {
-                                      begin: media.indices.0,
-                                      end: media.indices.1,
-                                      text:
-                                          format!(r#"<a href="{0}"><img alt="{0}" src="{0}"/></a>"#,
-                                                  media.media_url_https),
-                                  })
+                embed(&mut replacements, media);
             }
         }
 
-        replacements.sort_by_key(|r| r.begin);
         let mut buf = String::new();
-        let mut it = replacements.iter();
-        let mut replacement = it.next();
+        let mut end = 0;
         for (i, c) in self.text.chars().enumerate() {
-            if let Some(r) = replacement {
-                if i < r.begin {
-                    buf.push(c);
-                } else if i == r.begin {
-                    buf.push_str(&r.text);
-                } else if i < r.end {
-                    // ignore
-                } else if i == r.end {
-                    replacement = it.next();
-                    buf.push(c);
-                }
-            } else {
+            if i < end {
+                // skip
+            } else if replacements[i].text.is_empty() {
                 buf.push(c);
+            } else {
+                buf.push_str(&replacements[i].text);
+                end = replacements[i].end;
             }
         }
         buf.replace("&amp;", "&")
