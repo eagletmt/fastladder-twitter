@@ -312,7 +312,10 @@ impl FastladderTwitter {
                 }
             }
             _ => {
-                writeln!(&mut std::io::stderr(), "Unable to lookup users").unwrap();
+                writeln!(&mut std::io::stderr(),
+                         "Unable to get user timeline of {}",
+                         screen_name)
+                        .unwrap();
                 die(response);
             }
         }
