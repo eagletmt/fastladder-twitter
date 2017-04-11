@@ -1,0 +1,22 @@
+# Maintainer: Kohei Suzuki <eagletmt@gmail.com>
+pkgname=fastladder-twitter
+pkgver=0.1.0
+pkgrel=1
+arch=('i686' 'x86_64')
+url='https://github.com/eagletmt/fastladder-twitter'
+license=('MIT')
+depends=('openssl')
+makedepends=('cargo')
+source=("https://github.com/eagletmt/$pkgname/archive/v$pkgver.tar.gz")
+
+build() {
+  cd "$pkgname-$pkgver"
+  cargo build --release --locked
+}
+package() {
+  cd "$pkgname-$pkgver"
+  mkdir -p "$pkgdir/usr/bin"
+  install -m755 target/release/$pkgname "$pkgdir/usr/bin/"
+}
+
+sha512sums=('d1ec6ab42f0ba552d04ce8c96295c95ff6538d4d935018671f1720067629ed70a419b1ec829f3a43dc41cdeadaee13053d0fdbde00174f1256259edb12bd5ba1')
