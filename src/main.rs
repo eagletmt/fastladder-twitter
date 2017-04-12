@@ -1,5 +1,5 @@
 extern crate hyper;
-extern crate hyper_native_tls;
+extern crate hyper_rustls;
 extern crate serde;
 extern crate serde_json;
 extern crate url;
@@ -34,7 +34,7 @@ fn main() {
     let consumer_secret =
         std::env::var("TWITTER_CONSUMER_SECRET").expect("Set $TWITTER_CONSUMER_SECRET");
 
-    let tls = hyper_native_tls::NativeTlsClient::new().unwrap();
+    let tls = hyper_rustls::TlsClient::new();
     let client = hyper::Client::with_connector(hyper::net::HttpsConnector::new(tls));
     let response = client
         .post("https://api.twitter.com/oauth2/token")
@@ -335,7 +335,7 @@ struct Feed {
     title: String,
     body: String,
     link: String,
-    category: String, 
+    category: String,
     // published_date: String,
 }
 
@@ -348,7 +348,7 @@ impl Fastladder {
     }
 
     fn post_feeds(&self, feeds: &Vec<Feed>) {
-        let tls = hyper_native_tls::NativeTlsClient::new().unwrap();
+        let tls = hyper_rustls::TlsClient::new();
         let client = hyper::Client::with_connector(hyper::net::HttpsConnector::new(tls));
         let url = self.base_url.join("/rpc/update_feeds").unwrap();
         let feeds_json = serde_json::to_string(feeds).expect("Unable to encode feeds into JSON");
