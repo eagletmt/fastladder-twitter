@@ -1,3 +1,4 @@
+extern crate env_logger;
 extern crate hyper;
 extern crate hyper_rustls;
 extern crate serde;
@@ -6,6 +7,8 @@ extern crate url;
 
 #[macro_use]
 extern crate clap;
+#[macro_use]
+extern crate log;
 #[macro_use]
 extern crate serde_derive;
 
@@ -18,6 +21,8 @@ struct AccessToken {
 }
 
 fn main() {
+    env_logger::init().unwrap();
+
     let app = clap::App::new("fastladder-twitter")
         .version(crate_version!())
         .about("Post Twitter feeds to Fastladder")
@@ -74,7 +79,7 @@ struct FastladderTwitter {
     fastladder: Option<Fastladder>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 struct Tweet {
     id_str: String,
     user: User,
@@ -83,12 +88,12 @@ struct Tweet {
     extended_entities: Option<ExtendedEntities>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 struct User {
     screen_name: String,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 struct Entities {
     urls: Vec<Url>,
     hashtags: Vec<Hashtag>,
@@ -96,31 +101,31 @@ struct Entities {
     media: Option<Vec<Media>>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 struct Url {
     expanded_url: String,
     indices: (usize, usize),
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 struct Hashtag {
     text: String,
     indices: (usize, usize),
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 struct UserMention {
     screen_name: String,
     indices: (usize, usize),
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 struct Media {
     media_url_https: String,
     indices: (usize, usize),
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 struct ExtendedEntities {
     media: Vec<Media>,
 }
@@ -302,7 +307,13 @@ impl FastladderTwitter {
         match response.status {
             hyper::Ok => {
                 let tweets: Vec<Tweet> = serde_json::from_reader(response).unwrap();
-                let feeds = tweets.iter().map(|t| t.to_feed()).collect();
+                let feeds = tweets
+                    .iter()
+                    .map(|t| {
+                             debug!("{}", serde_json::to_string(t).unwrap());
+                             t.to_feed()
+                         })
+                    .collect();
                 if let Some(ref fl) = self.fastladder {
                     fl.post_feeds(&feeds);
                 } else {

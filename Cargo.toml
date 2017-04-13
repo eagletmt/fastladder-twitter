@@ -5,8 +5,10 @@ authors = ["Kohei Suzuki <eagletmt@gmail.com>"]
 
 [dependencies]
 clap = "2.23"
+env_logger = "0.4"
 hyper = "0.10"
 hyper-rustls = "0.3"
+log = "0.3"
 serde = "0.9"
 serde_derive = "0.9"
 serde_json = "0.9"
